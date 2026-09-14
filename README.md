@@ -39,7 +39,7 @@ The dbt project layer uses [`dagster-dbt`](https://github.com/dagster-io/dagster
 
 ```bash
 cp .env.example .env       # then paste your MotherDuck token
-uv sync
+uv sync                    # installs deps (see Feature-branch note below)
 dg dev                     # 4 code locations load at http://localhost:3000
 ```
 
@@ -87,12 +87,12 @@ done
 
 ## Feature-branch dependencies
 
-Because a handful of the parity features above haven't landed on `main` yet, the demo pins `dagster` / `dagster-dbt` / the integration libraries to prebuilt wheels checked into `wheels/`. Locally, `[tool.uv.sources]` in `pyproject.toml` points at a monorepo path (`/Users/ericthomas/internal/dagster-oss`) so `uv sync` picks up editable installs of the same code. Edit those paths if your checkout lives elsewhere.
+Because a handful of the parity features listed above haven't landed on `main` yet, the demo installs `dagster` / `dagster-dbt` / the integration libraries from prebuilt wheels checked into `wheels/` (see `requirements.txt`). Locally, the `[tool.uv.sources]` block in `pyproject.toml` points at editable checkouts of the same code — retarget those paths to wherever you have the source cloned, and `uv sync` picks it up.
 
-Once the upstream PRs merge and a `dagster-dbt` release ships them, the whole `wheels/` directory and the `[tool.uv.sources]` block go away and `uv add dagster-dbt` from PyPI replaces both.
+Once the upstream PRs merge and a `dagster-dbt` release ships them, both the `wheels/` directory and the `[tool.uv.sources]` block go away, and `uv add dagster-dbt` from PyPI replaces the whole setup.
 
 ## Known quirks worth calling out
 
-- **UI "Materialize" on individual asset tiles may error with `DagsterInvalidSubsetError`** when the selected asset receives cross-location asset checks (dbt source tests attaching to ingestion asset keys). Use the job button or the schedule — those go through explicit key selections that dodge the workspace-level check auto-inclusion.
-- **DuckDB vs Snowflake type quirks**: `date_trunc('month', ts)` returns TIMESTAMP on DuckDB, DATE on Snowflake. Any dbt model with an enforced `DATE` contract needs `::date` casting at the boundary (see `mrr.sql`).
-- **Refreshing the checked-in dbt manifest** (after any model edit): re-run `dbt parse --profiles-dir .` inside `src/demo/defs/.local_defs_state/DbtProjectComponent__<project>__/project/` and mirror the model file into that copy so the container ships the up-to-date SQL + manifest together.
+- **UI "Materialize" on individual asset tiles may error with `DagsterInvalidSubsetError`** when the selected asset receives cross-location asset checks (dbt source tests attaching to ingestion asset keys defined in another location). Use the job button or the schedule instead — those route through explicit key selections that dodge the workspace-level check auto-inclusion.
+- **DuckDB `date_trunc` returns TIMESTAMP, not DATE.** Any dbt model with an enforced `DATE` contract on a truncated column needs an explicit `::date` cast at the model boundary (see `mrr.sql`).
+- **Refreshing the checked-in dbt manifest** (after any model edit): re-run `dbt parse --profiles-dir .` inside `src/demo/defs/.local_defs_state/DbtProjectComponent__<project>__/project/` and mirror the edited model file into that copy so the container ships the up-to-date SQL + manifest together.
