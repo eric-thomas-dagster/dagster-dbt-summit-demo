@@ -1,0 +1,21 @@
+locations:
+  - location_name: summit-ingestion
+    code_source:
+      module_name: demo.ingestion.definitions
+    build:
+      directory: .
+  - location_name: summit-commerce-core
+    code_source:
+      module_name: demo.commerce_core.definitions
+    build:
+      directory: .
+  - location_name: summit-subscriptions-analytics
+    code_source:
+      module_name: demo.subscriptions_analytics.definitions
+    build:
+      directory: .
+  - location_name: summit-activation
+    code_source:
+      module_name: demo.activation.definitions
+    build:
+      directory: .

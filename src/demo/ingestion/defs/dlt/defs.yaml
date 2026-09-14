@@ -1,0 +1,55 @@
+# dlt ingestion — two Python-native pipelines feeding raw_events.* into
+# DuckDB. Both route through the CommerceDltIngestion demo subclass so YAML
+# can stay symmetric with the Fivetran side even though dlt sources are
+# normally declared in Python.
+#
+# In real mode: flip demo_mode to false and populate `loads:` with real
+# `DltLoadSpec`s (pointing at the platform team's dlt Python source module
+# for each event stream). The parent DltLoadCollectionComponent will then
+# emit @dlt_assets ops off those specs.
+
+type: demo.components.CommerceDltIngestion
+
+attributes:
+  demo_mode: true
+  loads: []
+  feed_name:        event_signups
+  warehouse_table:  signups
+  warehouse_schema: raw_events
+  demo_assets:
+    - key: raw_events/signups
+      group_name: dlt_events
+      kinds: [dlt, snowflake]
+      owners:
+        - platform-eng@example.com
+      tags:
+        domain: product
+        tier: raw
+      description: >
+        New-user signup events ingested by a dlt Python pipeline reading from
+        the product-side event stream. The identity anchor that joins to
+        raw_stripe.customers.email in commerce_core.dim_customers.
+
+---
+
+type: demo.components.CommerceDltIngestion
+
+attributes:
+  demo_mode: true
+  loads: []
+  feed_name:        event_page_views
+  warehouse_table:  page_views
+  warehouse_schema: raw_events
+  demo_assets:
+    - key: raw_events/page_views
+      group_name: dlt_events
+      kinds: [dlt, snowflake]
+      owners:
+        - platform-eng@example.com
+      tags:
+        domain: product
+        tier: raw
+      description: >
+        Anonymous + identified page-view events ingested by a dlt Python
+        pipeline. Feeds commerce_core.fct_events (incremental) for funnel /
+        cohort analysis downstream.

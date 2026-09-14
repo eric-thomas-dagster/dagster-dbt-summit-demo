@@ -1,0 +1,108 @@
+version: 2
+
+# Exposures — Feature 3 (`enable_exposure_assets: true` in defs.yaml).
+#
+# Each exposure declares `meta.dagster.asset_key` matching the corresponding
+# activation asset key in the `activation` code location. Because exposure
+# and activation live in DIFFERENT code locations, Dagster's remote-graph
+# resolution merges them into a single node: the exposure contributes
+# description + owner + url + maturity + tags; the activation node
+# contributes materialization behavior. One node, two systems agree — the
+# dbt-declared handoff is first-class in the graph.
+exposures:
+  # ---- Census: Salesforce ---------------------------------------------------
+  - name: salesforce_account_mrr
+    label: Salesforce — Account MRR
+    type: application
+    description: >
+      MRR synced to Salesforce Account.account_mrr via Census. Finance team
+      account executives see per-account MRR in Salesforce opportunity views.
+    url: https://census.example.com/syncs/sync-mrr-001
+    maturity: high
+    owner:
+      email: growth-eng@example.com
+      name: Growth Engineering
+    depends_on:
+      - ref('mrr')
+    tags: [census, salesforce, revenue]
+    meta:
+      dagster:
+        asset_key: ["salesforce", "account_mrr"]
+
+  # ---- Hightouch: Braze -----------------------------------------------------
+  - name: braze_churn_risk_audience
+    label: Braze — Churn Risk Audience
+    type: application
+    description: >
+      churn_risk_bucket pushed to Braze as a customer attribute via Hightouch.
+      Retention-flow campaign segments on this attribute to target the
+      high_risk cohort.
+    url: https://app.hightouch.com/syncs/ht-sync-churn-001
+    maturity: high
+    owner:
+      email: growth-eng@example.com
+      name: Growth Engineering
+    depends_on:
+      - ref('churn_prediction')
+    tags: [hightouch, braze, retention]
+    meta:
+      dagster:
+        asset_key: ["braze", "churn_risk_audience"]
+
+  - name: braze_ltv_segments_audience
+    label: Braze — LTV Segments Audience
+    type: application
+    description: >
+      Customer LTV quartile (whales/core/mid/tail) pushed to Braze via
+      Hightouch as a customer attribute for VIP-tier campaign targeting.
+    url: https://app.hightouch.com/syncs/ht-sync-ltv-001
+    maturity: medium
+    owner:
+      email: growth-eng@example.com
+      name: Growth Engineering
+    depends_on:
+      - ref('ltv_segments')
+    tags: [hightouch, braze, growth]
+    meta:
+      dagster:
+        asset_key: ["braze", "ltv_segments_audience"]
+
+  # ---- PowerBI: Dashboards --------------------------------------------------
+  - name: powerbi_exec_revenue_dashboard
+    label: PowerBI — Executive Revenue Dashboard
+    type: dashboard
+    description: >
+      Board-facing revenue dashboard — MRR, growth rate, paying customers,
+      cohort revenue retention. Finance team owns interpretation.
+    url: https://app.powerbi.com/reports/exec-revenue-dashboard
+    maturity: high
+    owner:
+      email: finance@example.com
+      name: Finance
+    depends_on:
+      - ref('mrr')
+      - ref('fct_orders')
+    tags: [powerbi, dashboard, revenue, exec]
+    meta:
+      dagster:
+        asset_key: ["powerbi", "exec_revenue_dashboard"]
+
+  - name: powerbi_growth_cohort_dashboard
+    label: PowerBI — Growth Cohort Dashboard
+    type: dashboard
+    description: >
+      Growth team's cohort-retention dashboard — customer count by LTV
+      segment crossed with product engagement events. Feeds retention
+      roadmap conversations.
+    url: https://app.powerbi.com/reports/growth-cohort-dashboard
+    maturity: medium
+    owner:
+      email: growth-eng@example.com
+      name: Growth Engineering
+    depends_on:
+      - ref('ltv_segments')
+      - ref('fct_events')
+    tags: [powerbi, dashboard, growth]
+    meta:
+      dagster:
+        asset_key: ["powerbi", "growth_cohort_dashboard"]

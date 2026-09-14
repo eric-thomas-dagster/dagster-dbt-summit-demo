@@ -1,0 +1,68 @@
+# Fivetran ingestion — two connector instances feeding raw_stripe.* into
+# DuckDB. Both route through the CommerceFivetranIngestion demo subclass so
+# the workspace section can carry placeholder credentials in demo mode.
+#
+# In real mode: flip demo_mode to false, populate the workspace credentials
+# with real Fivetran API keys, and the parent FivetranAccountComponent's
+# discovery / sync / poll behaviour takes over. The `connector_selector` and
+# `demo_assets` blocks stay useful in both modes.
+
+type: demo.components.CommerceFivetranIngestion
+
+attributes:
+  demo_mode: true
+  workspace:
+    account_id: "demo"        # {{ env.FIVETRAN_ACCOUNT_ID }} in prod
+    api_key:    "demo"        # {{ env.FIVETRAN_API_KEY }}
+    api_secret: "demo"        # {{ env.FIVETRAN_API_SECRET }}
+  connector_selector:
+    by_name:
+      - stripe_customers
+  feed_name:        stripe_customers
+  warehouse_table:  customers
+  warehouse_schema: raw_stripe
+  demo_assets:
+    - key: raw_stripe/customers
+      group_name: fivetran_stripe
+      kinds: [fivetran, snowflake]
+      owners:
+        - platform-eng@example.com
+      tags:
+        domain: billing
+        tier: raw
+        pii: "true"
+      description: >
+        Stripe Customer records synced from the Stripe API via Fivetran.
+        The identity anchor on the billing side — joins to
+        stg_events_signups.email in commerce_core for the canonical
+        dim_customers dimension.
+
+---
+
+type: demo.components.CommerceFivetranIngestion
+
+attributes:
+  demo_mode: true
+  workspace:
+    account_id: "demo"
+    api_key:    "demo"
+    api_secret: "demo"
+  connector_selector:
+    by_name:
+      - stripe_charges
+  feed_name:        stripe_charges
+  warehouse_table:  charges
+  warehouse_schema: raw_stripe
+  demo_assets:
+    - key: raw_stripe/charges
+      group_name: fivetran_stripe
+      kinds: [fivetran, snowflake]
+      owners:
+        - platform-eng@example.com
+      tags:
+        domain: billing
+        tier: raw
+      description: >
+        Stripe Charge (payment) events. Every successful charge becomes a
+        row in commerce_core.fct_orders (which subscriptions_analytics
+        aggregates into MRR).

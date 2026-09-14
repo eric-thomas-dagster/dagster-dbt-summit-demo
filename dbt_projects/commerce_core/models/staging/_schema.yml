@@ -1,0 +1,29 @@
+version: 2
+
+# Staging is thin cleanup on top of raw sources — 1:1 with source tables,
+# consistent naming (`stg_<source>_<table>`), no business logic.
+models:
+  - name: stg_stripe_customers
+    description: Cleaned Stripe customer records — one row per Stripe customer id.
+    columns:
+      - name: stripe_customer_id
+        tests: [not_null, unique]
+      - name: email
+        tests: [not_null]
+
+  - name: stg_stripe_charges
+    description: Cleaned Stripe charge (payment) events.
+    columns:
+      - name: charge_id
+        tests: [not_null, unique]
+      - name: stripe_customer_id
+        tests: [not_null]
+
+  - name: stg_events_page_views
+    description: Cleaned product page view events from the dlt-ingested stream.
+
+  - name: stg_events_signups
+    description: Cleaned product signup events — the identity anchor joining Stripe + product-side data.
+    columns:
+      - name: user_id
+        tests: [not_null, unique]

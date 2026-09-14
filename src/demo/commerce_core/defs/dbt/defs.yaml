@@ -1,0 +1,78 @@
+type: dagster_dbt.DbtProjectComponent
+template_vars_module: .template_vars
+
+# commerce_core — owned by the Platform Team. Ingests Fivetran (raw_stripe) +
+# dlt (raw_events) into a canonical dim/fct layer. Its marts are `access: public`
+# so the downstream subscriptions_analytics project can `ref()` them across the
+# mesh boundary via `external_packages: [commerce_core]` on the downstream side.
+#
+# This defs.yaml lights up every opt-in feature from the PR stack (#26391 Core;
+# #26393 public helpers) so the Dagster UI shows the full surface: sources with
+# freshness, contracts, materialization kinds, code-version automation.
+attributes:
+  project:
+    # Two dbt projects live side-by-side under /dbt_projects at the repo root
+    # so their paths are stable across editable / installed deployments.
+    project_dir: "{{ project_root }}/dbt_projects/commerce_core"
+
+  # Every dbt node lands in the `commerce_core` group by default; downstream
+  # models can override via `meta.dagster.group` on the model itself.
+  translation:
+    group_name: commerce_core
+
+  # ---- include_spec_metadata: opt-in spec-load-time metadata addons at the
+  # component top level. Cheap — read from the manifest, no warehouse queries.
+  # Bundles Features 2 (contract) and 7 (materialization kinds).
+  include_spec_metadata:
+    - materialization_kinds
+    - contract_metadata
+
+  translation_settings:
+    # ---- Feature 1a: dbt sources become observable external AssetSpecs.
+    # Because ingestion (Fivetran + dlt) lives in a SEPARATE code location,
+    # dbt source specs and Fivetran / dlt asset defs share AssetKeys across
+    # code locations. Dagster's remote-graph resolution merges them into a
+    # single node: Fivetran / dlt contributes the materializable
+    # AssetsDefinition, dbt contributes freshness policy + column schema
+    # metadata from sources.yml.
+    enable_source_assets: true
+    enable_freshness_policies: true
+    enable_source_freshness_observations: true
+    enable_source_tests_as_checks: true
+
+    # ---- Feature 3: exposures as downstream AssetSpecs (added later, tied to
+    # Census/Hightouch/PowerBI activation).
+    enable_exposure_assets: true
+
+    # ---- Feature 3.5: code-version automation — a model's raw-SQL change
+    # triggers a rebuild via AutomationCondition.code_version_changed().
+    enable_code_version_automation: true
+
+    # ---- Feature 4: semantic layer (added in subscriptions_analytics; enabled
+    # here too in case the platform team adds cross-project metrics later).
+    enable_semantic_layer_assets: true
+
+    enable_source_metadata: true
+
+  # ---- Feature 3.6 (PR #26391): state-aware `dbt/state` tagging.
+  #
+  # Compares per-model `checksum.checksum` against the manifest snapshotted at
+  # `prod_state/manifest.json` (recorded today as the baseline). Every model
+  # spec gets tagged `dbt/state=modified|unchanged|new`. In the Dagster UI:
+  #   - tag:dbt/state=modified  → programmatically selectable for CI ("run
+  #     only what changed"), automation conditions, and alerts.
+  #   - Visible on each asset's tag row — reviewers see at-a-glance which
+  #     models in a PR are impacted.
+  # Re-snapshot `prod_state/manifest.json` after each production release to
+  # keep the diff scoped to "since last prod ship."
+  state_manifest_path: "{{ project_root }}/dbt_projects/commerce_core/prod_state/manifest.json"
+
+# Reactive automation on every commerce_core asset — refire when any
+# upstream advances (ingestion → source → staging → marts cascade). Combined
+# with the ingestion location's every-15-min schedule, this keeps the
+# graph continuously fresh with no manual materialization clicks.
+post_processing:
+  assets:
+    - target: "*"
+      attributes:
+        automation_condition: "{{ automation_eager }}"

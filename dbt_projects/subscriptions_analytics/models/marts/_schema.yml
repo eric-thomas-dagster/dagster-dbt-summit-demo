@@ -1,0 +1,127 @@
+version: 2
+
+# Marts layer for subscriptions_analytics. All three marts are `access: public`
+# so downstream Dagster code locations (Census, Hightouch, PowerBI activation
+# components) can depend on them via AssetKey references — Feature 5 stubs
+# only cross into the DBT layer, but public access is what signals "safe for
+# other systems to consume."
+#
+# PR feature garnish concentrated here:
+#   - `build_after` freshness on mrr (Feature 1b + 3.5's automation)
+#   - contract on mrr (Feature 2) — column types are a stable interface for
+#     Census / PowerBI so they don't silently break on rename
+#   - `meta.dagster.tags` on churn_risk_score (Feature 8 — value-carrying tag
+#     `sensitivity: high` because churn scores are commercially sensitive)
+#   - `meta.dagster.owners: [growth-eng@example.com]` for team attribution
+models:
+  - name: mrr
+    description: >
+      Monthly recurring revenue timeseries. Top-line finance metric — flowing
+      into Salesforce via Census and the exec PowerBI dashboard.
+    access: public
+    config:
+      materialized: table
+      # Feature 2 (contract) — enforced. Column types below match what DuckDB
+      # returns for the aggregation (date, double, bigint). Feature 2 metadata
+      # surfaces the full contract in Dagster asset metadata; violations fail
+      # the model build (dbt semantics) rather than showing as a check.
+      contract: {enforced: true}
+      freshness:
+        # Feature 1b: freshness policy auto-derived from build_after.
+        # Feature 3.5: automation condition `freshness_failed() &
+        # any_or_all_deps_updated()` attached, so mrr auto-rematerializes when
+        # the policy trips AND fct_orders has advanced.
+        build_after: {count: 6, period: hour}
+      meta:
+        dagster:
+          owners: [growth-eng@example.com]
+          tags:
+            tier: gold
+            domain: revenue
+    columns:
+      - name: month
+        description: Calendar month (first day, UTC) — DuckDB returns `date` from date_trunc.
+        data_type: date
+        constraints:
+          - type: not_null
+          - type: primary_key
+        tests: [not_null, unique]
+      - name: mrr_usd
+        description: Monthly recurring revenue in USD.
+        data_type: double
+        constraints: [{type: not_null}]
+        tests: [not_null]
+        meta:
+          dagster:
+            tags:
+              domain: revenue
+              cost_center: finance
+      - name: paying_customers
+        description: Distinct paying customers in the month.
+        data_type: bigint
+      - name: arpu_usd
+        description: Average revenue per paying user (mrr_usd / paying_customers).
+        data_type: double
+      - name: mrr_delta_usd
+        description: MoM MRR delta (nullable for first month).
+        data_type: double
+      - name: mrr_growth_pct
+        description: MoM MRR growth % (nullable for first month).
+        data_type: double
+
+  - name: churn_prediction
+    description: >
+      Per-customer churn risk score + bucket. Feeds Hightouch → Braze
+      "high-risk retention" audience for lifecycle emails.
+    access: public
+    config:
+      materialized: table
+      freshness:
+        build_after: {count: 4, period: hour}
+      meta:
+        dagster:
+          owners: [growth-ds@example.com]
+          tags:
+            tier: gold
+            domain: retention
+    columns:
+      - name: customer_id
+        description: Canonical customer id (from dim_customers).
+        tests: [not_null, unique]
+      - name: email
+        description: Customer email — used as Hightouch identity resolver.
+        tags: [pii]
+        meta:
+          dagster:
+            tags:
+              pii: high
+      - name: churn_risk_score
+        description: Model score in [0,1]. Higher = more likely to churn.
+        meta:
+          dagster:
+            tags:
+              sensitivity: high
+              model: heuristic_v1
+      - name: churn_risk_bucket
+        description: high_risk / medium_risk / low_risk bucketization.
+
+  - name: ltv_segments
+    description: >
+      Customer LTV quartile segmentation for downstream marketing
+      activation via Hightouch.
+    access: public
+    config:
+      materialized: table
+      freshness:
+        build_after: {count: 12, period: hour}
+      meta:
+        dagster:
+          owners: [growth-eng@example.com]
+          tags:
+            tier: gold
+            domain: growth
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: ltv_segment
+        description: whales / core / mid / tail

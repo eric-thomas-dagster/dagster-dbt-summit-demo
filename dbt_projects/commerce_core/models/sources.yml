@@ -1,0 +1,64 @@
+version: 2
+
+# Sources demonstrate PR #26391 Feature 1a — dbt sources become observable
+# external AssetSpecs, and their `freshness` block auto-derives a Dagster
+# TimeWindowFreshnessPolicy. Feature 1c's source-freshness observation sensor
+# then reads dbt's own `sources.json` and emits materialization events, so the
+# UI lights up green/yellow/red without any manual freshness code.
+#
+# Feature 5 (mesh): these raw tables are landed by the Fivetran + dlt
+# demo-mode components. In prod they'd be Fivetran/dlt-owned; in demo mode our
+# ingestion subclasses write mock rows to DuckDB into the same schemas below.
+sources:
+  - name: raw_stripe
+    description: >
+      Stripe billing tables synced by Fivetran. Owned by the platform-eng
+      ingestion team — analytics engineers should not write here directly.
+    schema: raw_stripe
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 12, period: hour}
+      error_after: {count: 24, period: hour}
+    tables:
+      - name: customers
+        description: Stripe Customer records synced from the Stripe API.
+        columns:
+          - name: id
+            description: Stripe customer id (`cus_*`)
+            tests: [not_null, unique]
+          - name: email
+            description: Customer email — PII.
+      - name: charges
+        description: Stripe Charge (payment) events.
+        # Per-table freshness override — Feature 1a picks up the tighter policy.
+        freshness:
+          warn_after: {count: 6, period: hour}
+          error_after: {count: 12, period: hour}
+        columns:
+          - name: id
+            description: Stripe charge id (`ch_*`)
+            tests: [not_null, unique]
+          - name: customer
+            description: FK to `raw_stripe.customers.id`.
+            tests: [not_null]
+
+  - name: raw_events
+    description: >
+      Product event stream ingested by a dlt Python pipeline. Owned by the
+      platform-eng team; event schema is defined in the pipeline's Python source.
+    schema: raw_events
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 4, period: hour}
+      error_after: {count: 8, period: hour}
+    tables:
+      - name: page_views
+        description: Anonymous + identified page view events from web + mobile.
+      - name: signups
+        description: New user signup events — the canonical identity anchor.
+        columns:
+          - name: user_id
+            description: Anonymous → identified user id at signup.
+            tests: [not_null, unique]
+          - name: email
+            description: Signup email — joins to `raw_stripe.customers.email`.

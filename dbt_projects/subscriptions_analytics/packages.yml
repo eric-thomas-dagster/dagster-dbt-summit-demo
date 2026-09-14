@@ -1,0 +1,18 @@
+# Install commerce_core as a local dbt package so cross-project ref() works
+# during local development. Run `dbt deps` in this directory before `dbt parse`.
+#
+# In dbt Cloud Enterprise this would be `dependencies.yml` with a project
+# reference instead — the mesh semantics are identical from dagster-dbt's
+# perspective (Feature 5 keys off `package_name` on manifest nodes), but the
+# local `packages.yml` form works with dbt Core + DuckDB and needs zero Cloud.
+#
+# Feature 5 (mesh) then does two things automatically:
+#   1. dagster-dbt sees `external_packages: [commerce_core]` in the component
+#      config and excludes commerce_core's models from THIS project's
+#      materializable @dbt_assets — Dagster won't try to rebuild them here.
+#   2. dagster-dbt emits observable STUB AssetSpecs for every `access: public`
+#      commerce_core model in the manifest, so downstream marts show upstream
+#      lineage in the Dagster UI. Those stubs auto-merge with commerce_core's
+#      real AssetsDefinition from its own code location.
+packages:
+  - local: ../commerce_core

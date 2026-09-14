@@ -1,0 +1,4 @@
+packages:
+  - local: ../commerce_core
+    name: commerce_core
+sha1_hash: 4eea90d71e2b575833c8a44fc04f69f5a90607cc

@@ -1,0 +1,53 @@
+# Hightouch sync — churn_prediction → Braze retention audiences.
+# Growth engineering owns retention email campaigns; Braze needs
+# `churn_risk_bucket` as a customer attribute so segment builders can target
+# the "high_risk" cohort with a save-the-customer flow.
+#
+# In real mode: flip demo_mode to false, set sync_id to the real Hightouch
+# sync id (or use "$HIGHTOUCH_SYNC_ID" env-var indirection), and populate the
+# hightouch resource with the API key.
+
+type: demo.components.CommerceHightouchSync
+
+attributes:
+  demo_mode: true
+  sync_id: "ht-sync-churn-001"
+  asset:
+    key: braze/churn_risk_audience
+    group_name: hightouch_braze
+    kinds: [hightouch, braze]
+    owners:
+      - growth-eng@example.com
+    tags:
+      domain: retention
+      destination: braze
+    deps:
+      - churn_prediction                  # subscriptions_analytics.churn_prediction
+    automation_condition: "{{ automation_condition.eager() }}"
+    description: >
+      Push per-customer churn_risk_bucket into Braze as a customer attribute.
+      The retention-flow campaign in Braze segments on this attribute to
+      target save-the-customer emails at the high_risk bucket.
+
+---
+
+type: demo.components.CommerceHightouchSync
+
+attributes:
+  demo_mode: true
+  sync_id: "ht-sync-ltv-001"
+  asset:
+    key: braze/ltv_segments_audience
+    group_name: hightouch_braze
+    kinds: [hightouch, braze]
+    owners:
+      - growth-eng@example.com
+    tags:
+      domain: growth
+      destination: braze
+    deps:
+      - ltv_segments                      # subscriptions_analytics.ltv_segments
+    automation_condition: "{{ automation_condition.eager() }}"
+    description: >
+      Push customer LTV quartile (whales/core/mid/tail) into Braze as a
+      customer attribute for VIP-tier campaign targeting.

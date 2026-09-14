@@ -1,0 +1,120 @@
+version: 2
+
+# Marts layer — PR feature garnish concentrates here:
+#   - Feature 2 (contract_metadata):    `dim_customers` has an enforced contract
+#     surfacing column types + not-null/PK constraints in Dagster asset metadata.
+#   - Feature 1b (build_after freshness): `dim_customers` gets a
+#     TimeWindowFreshnessPolicy from `config.freshness.build_after`.
+#   - Feature 8 (meta.dagster.tags):    value-carrying column tags
+#     (`pii: high`, `data_class: personal`, `domain: revenue`) show up on
+#     TableColumn.tags in the UI.
+#   - Feature 5 (mesh):                 `access: public` on dim_customers,
+#     fct_orders, fct_events makes them the mesh interface for the downstream
+#     subscriptions_analytics project.
+#   - Feature 3 (meta.dagster.owners):  team ownership at the model level.
+models:
+  - name: dim_customers
+    description: >
+      Canonical customer dimension — deduplicates Stripe billing identity + product
+      signup identity via email. The identity table for the whole warehouse.
+    access: public
+    config:
+      materialized: table
+      contract: {enforced: true}
+      freshness:
+        build_after: {count: 24, period: hour}
+      meta:
+        dagster:
+          owners: [platform-eng@example.com]
+    columns:
+      - name: customer_id
+        description: Canonical customer id — signup user_id if present, else `stripe:<id>`.
+        data_type: varchar
+        constraints:
+          - type: not_null
+          - type: primary_key
+        tests: [not_null, unique]
+      - name: stripe_customer_id
+        description: Stripe customer id (`cus_*`).
+        data_type: varchar
+      - name: email
+        description: Customer email — PII.
+        data_type: varchar
+        tags: [pii]
+        meta:
+          dagster:
+            tags:
+              pii: high
+              data_class: personal
+      - name: name
+        description: Customer legal name — PII.
+        data_type: varchar
+        tags: [pii]
+        meta:
+          dagster:
+            tags:
+              pii: high
+              data_class: personal
+      - name: first_seen_at
+        description: Timestamp of first signup event (nullable if signup was pre-tracking).
+        data_type: timestamp
+      - name: first_charge_at
+        description: Timestamp of first successful Stripe charge (nullable if never paid).
+        data_type: timestamp
+      - name: lifetime_orders
+        description: Count of successful Stripe charges to date.
+        data_type: bigint
+      - name: lifetime_revenue_usd
+        description: Sum of successful Stripe charge amounts to date (USD).
+        data_type: double
+        meta:
+          dagster:
+            tags:
+              domain: revenue
+              cost_center: finance
+
+  - name: fct_orders
+    description: One row per successful Stripe charge = order.
+    access: public
+    config:
+      materialized: view
+      freshness:
+        build_after: {count: 1, period: hour}
+      meta:
+        dagster:
+          owners: [platform-eng@example.com]
+    columns:
+      - name: order_id
+        description: Stripe charge id (`ch_*`) — this order's canonical key.
+        tests: [not_null, unique]
+      - name: stripe_customer_id
+        description: FK to `dim_customers.stripe_customer_id`.
+        tests: [not_null]
+      - name: amount_usd
+        description: Order amount in USD.
+        tests: [not_null]
+        meta:
+          dagster:
+            tags:
+              domain: revenue
+
+  - name: fct_events
+    description: >
+      Product event fact — page views + signup events unioned. Incremental on
+      `_loaded_at`. Feeds cohort / funnel analytics downstream.
+    access: public
+    config:
+      # `materialized: incremental` is set on the model file so the manifest
+      # shows the incremental kind — Feature 7 renders that icon in Dagster UI.
+      freshness:
+        build_after: {count: 2, period: hour}
+      meta:
+        dagster:
+          owners: [platform-eng@example.com]
+    columns:
+      - name: event_id
+        description: Deterministic event hash (user_id + event_type + event_at).
+        tests: [not_null, unique]
+      - name: user_id
+        description: Anonymous or identified user id (post-signup).
+        tests: [not_null]

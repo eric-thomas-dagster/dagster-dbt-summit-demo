@@ -1,0 +1,21 @@
+# pyproject.toml INTENTIONALLY NOT ignored — dbt/DbtProjectComponent's
+# `get_defs_module_path_for_project` walks up looking for pyproject.toml
+# or dg.toml. Without it the component fails to load with
+# "Could not find dg.toml or pyproject.toml in {project_root}".
+uv.lock
+.venv
+.env
+.dagster_home
+.dg
+.vscode
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+# NOTE: `target` intentionally NOT ignored — the DbtProjectComponent's
+# state-cache directory `src/demo/defs/.local_defs_state/DbtProjectComponent__*/project/target/`
+# holds the compiled manifest.json that Cloud reads at boot. A blanket
+# `target` glob strips it, causing DagsterDbtManifestNotFoundError.
+# Repo-root target/ dirs (from local dbt runs) also stay — small footprint.
+# NOTE: `logs` intentionally NOT ignored for the same reason (dbt run logs
+# from local parses can live under `.local_defs_state/…/project/logs/`).

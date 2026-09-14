@@ -1,0 +1,53 @@
+# PowerBI dashboards — the visible business outcome downstream of everything.
+# Two reports, one workspace:
+#   - Exec Revenue Dashboard — consumed by finance / board reporting
+#   - Growth Cohort Dashboard — consumed by growth eng for cohort retention
+#
+# Both auto-refresh after their upstream marts land (AutomationCondition.eager
+# added in step 10 with the PR-feature garnish pass).
+
+type: demo.components.CommercePowerBIRefresh
+
+attributes:
+  demo_mode: true
+  workspace:
+    credentials:
+      client_id:     "demo"        # {{ env.POWERBI_CLIENT_ID }} in prod
+      client_secret: "demo"        # {{ env.POWERBI_CLIENT_SECRET }}
+      tenant_id:     "demo"        # {{ env.POWERBI_TENANT_ID }}
+    workspace_id: "demo-workspace-id"
+  demo_assets:
+    - key: powerbi/exec_revenue_dashboard
+      group_name: powerbi_dashboards
+      kinds: [powerbi]
+      owners:
+        - finance@example.com
+      tags:
+        domain: revenue
+        audience: exec
+      deps:
+        - mrr                      # subscriptions_analytics.mrr
+        - fct_orders               # commerce_core.fct_orders (public)
+      automation_condition: "{{ automation_condition.eager() }}"
+      description: >
+        Board-facing revenue dashboard — top-line MRR, growth rate, paying
+        customers count, and cohort revenue retention. Finance team owns
+        interpretation; refreshes eagerly when either mrr or fct_orders
+        advances.
+
+    - key: powerbi/growth_cohort_dashboard
+      group_name: powerbi_dashboards
+      kinds: [powerbi]
+      owners:
+        - growth-eng@example.com
+      tags:
+        domain: growth
+        audience: internal
+      deps:
+        - ltv_segments             # subscriptions_analytics.ltv_segments
+        - fct_events               # commerce_core.fct_events (public)
+      automation_condition: "{{ automation_condition.eager() }}"
+      description: >
+        Growth team's cohort-retention dashboard — customer count by LTV
+        segment (whales/core/mid/tail) crossed with product engagement
+        events. Feeds retention roadmap conversations.

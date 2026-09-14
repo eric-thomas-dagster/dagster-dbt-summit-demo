@@ -1,0 +1,86 @@
+type: dagster_dbt.DbtProjectComponent
+template_vars_module: .template_vars
+
+# subscriptions_analytics — owned by the Growth Team. Consumes commerce_core's
+# `access: public` marts (dim_customers, fct_orders, fct_events) across the
+# dbt mesh boundary. Produces MRR, churn, LTV — which then feed:
+#   - Census → Salesforce (account_mrr)          (see defs/activation/census/)
+#   - Hightouch → Braze (churn_risk audience)    (see defs/activation/hightouch/)
+#   - PowerBI exec dashboard                     (see defs/activation/powerbi/)
+#
+# This defs.yaml lights the same PR-stack knobs as commerce_core PLUS the
+# mesh-boundary knob (`external_packages`) — Feature 5.
+attributes:
+  project:
+    project_dir: "{{ project_root }}/dbt_projects/subscriptions_analytics"
+
+  translation:
+    # Everything defaults to `subscriptions_analytics` group. In the UI this
+    # renders as a visibly distinct island from commerce_core's group of the
+    # same name.
+    group_name: subscriptions_analytics
+
+  include_spec_metadata:
+    - materialization_kinds
+    - contract_metadata
+
+  translation_settings:
+    # Sources are declared in commerce_core; this project has none of its own.
+    # Disabled here because commerce_core is installed as a local dbt package
+    # (via packages.yml), so its sources appear in this project's manifest
+    # too — leaving `enable_source_assets: true` here would cause both
+    # projects to emit stubs for the same AssetKeys and collide.
+    enable_source_assets: false
+    # All-or-nothing: `enable_freshness_policies: true` derives Dagster
+    # FreshnessPolicies from every dbt-native declaration Dagster knows about
+    # — `sources[*].freshness.warn_after`/`error_after`, `models[*].config.
+    # freshness.build_after`, and `meta.dagster.freshness_policy` on any node.
+    # We keep `enable_source_assets: false` here so commerce_core sources
+    # don't get re-emitted from this project's manifest, but mrr's
+    # `build_after: 6h` still becomes a real FreshnessPolicy on the model.
+    enable_freshness_policies: true
+    enable_source_freshness_observations: false
+    enable_source_tests_as_checks: false
+
+    # Feature 3 — exposures pointing at Census/Hightouch/PowerBI asset keys land
+    # in exposures.yml in step 9.
+    enable_exposure_assets: true
+
+    # Feature 3.5 — SQL-change-triggered rebuilds via
+    # `AutomationCondition.code_version_changed()`.
+    enable_code_version_automation: true
+
+    # Feature 4 — semantic_models.yml is where sem_mrr + metric_mrr live.
+    enable_semantic_layer_assets: true
+
+    enable_source_metadata: true
+
+  # ---- Feature 5 (dbt mesh, PR #26391) — cross-code-location -------------
+  # commerce_core lives in its own code location; this project depends on its
+  # `access: public` marts via `packages.yml` local install. Two things happen:
+  #   1. dagster-dbt appends `exclude: "package:commerce_core"` internally so
+  #      this project's @dbt_assets doesn't try to rebuild commerce_core's
+  #      models — Platform Team owns them in the commerce_core location.
+  #   2. Observable STUB AssetSpecs are emitted for every `access: public`
+  #      commerce_core model in this project's manifest. Because commerce_core
+  #      lives in a SEPARATE code location, Dagster's remote-graph resolution
+  #      merges these stubs with commerce_core's real AssetsDefinitions —
+  #      collision-free mesh, one node per model in the UI.
+  external_packages:
+    - commerce_core
+
+  # ---- Feature 3.6 (PR #26391): state-aware `dbt/state` tagging.
+  # Same as commerce_core — every subs model gets a `dbt/state=...` tag by
+  # comparing against `prod_state/manifest.json`. Slim-CI selection via
+  # `AssetSelection.tag("dbt/state", "modified")` works across BOTH projects
+  # so a single CI job can materialize the changed models from either team
+  # without needing separate selection logic per project.
+  state_manifest_path: "{{ project_root }}/dbt_projects/subscriptions_analytics/prod_state/manifest.json"
+
+# Reactive automation on every subs_analytics asset — refire when
+# commerce_core marts advance (mesh dep) or when a subs model's SQL changes.
+post_processing:
+  assets:
+    - target: "*"
+      attributes:
+        automation_condition: "{{ automation_eager }}"

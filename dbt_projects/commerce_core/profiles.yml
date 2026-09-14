@@ -1,0 +1,13 @@
+commerce_core:
+  target: dev
+  outputs:
+    dev:
+      # MotherDuck (cloud DuckDB) via dbt-duckdb. Shared database with
+      # subscriptions_analytics so cross-project mesh refs resolve to real
+      # tables. Auth: dbt-duckdb reads MOTHERDUCK_TOKEN from the env; the
+      # `md:` prefix in the path routes to MotherDuck instead of a local
+      # DuckDB file.
+      type: duckdb
+      path: "md:dbt_summit"
+      schema: commerce_core
+      threads: 4

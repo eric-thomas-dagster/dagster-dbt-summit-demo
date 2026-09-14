@@ -1,0 +1,42 @@
+# Four code locations mapped to the four data-platform layers. Each team
+# runs its own location so ownership boundaries in Dagster match ownership
+# boundaries in the org:
+#
+#   ingestion               — Platform Team (Fivetran + dlt)
+#   commerce_core           — Platform Team (dbt canonical dim/fct)
+#   subscriptions_analytics — Growth Team (dbt marts + semantic layer)
+#   activation              — Growth Team + Finance (Census, Hightouch, PowerBI)
+#
+# Splitting like this ALSO lights up all three of Dagster's asset-node
+# auto-merge stories:
+#
+#   Feature 1a (source_assets)   ingestion.raw_stripe/customers merges with
+#                                commerce_core's dbt source spec of the same
+#                                AssetKey. Fivetran contributes materialization;
+#                                dbt contributes the freshness policy.
+#
+#   Feature 5 (mesh stubs)       subs' `external_packages: [commerce_core]`
+#                                emits observable stubs for commerce_core's
+#                                public marts. Those stubs merge with
+#                                commerce_core's real AssetsDefinition.
+#
+#   Feature 3 (exposures)        exposures in subs use `meta.dagster.asset_key`
+#                                to match activation asset keys. Exposure
+#                                metadata (dbt owner / url / tags) merges with
+#                                the activation node's materialization behavior.
+#
+# All three merges only fire ACROSS code locations (at the remote asset graph
+# level), not within a single Definitions. Hence the 4-way split.
+load_from:
+  - python_module:
+      module_name: demo.ingestion.definitions
+      location_name: ingestion
+  - python_module:
+      module_name: demo.commerce_core.definitions
+      location_name: commerce_core
+  - python_module:
+      module_name: demo.subscriptions_analytics.definitions
+      location_name: subscriptions_analytics
+  - python_module:
+      module_name: demo.activation.definitions
+      location_name: activation

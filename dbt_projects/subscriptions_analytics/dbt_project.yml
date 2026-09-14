@@ -1,0 +1,29 @@
+name: "subscriptions_analytics"
+
+config-version: 2
+version: "0.1"
+
+profile: "subscriptions_analytics"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analysis"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_modules"
+  - "logs"
+
+require-dbt-version: [">=1.9.0", "<2.0.0"]
+
+# Owned by the "Growth Team" — this project consumes commerce_core's PUBLIC
+# marts (dim_customers, fct_orders, fct_events) via dbt Mesh and produces
+# subscription-intelligence outputs (MRR, churn, LTV). Its marts are all
+# `access: public` so downstream tools (Census, Hightouch, PowerBI) can
+# consume them via their own asset graphs.
+models:
+  subscriptions_analytics:
+    +materialized: table

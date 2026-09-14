@@ -1,0 +1,10 @@
+subscriptions_analytics:
+  target: dev
+  outputs:
+    dev:
+      # MotherDuck — same database as commerce_core so mesh cross-project
+      # refs resolve. dbt-duckdb picks up MOTHERDUCK_TOKEN from the env.
+      type: duckdb
+      path: "md:dbt_summit"
+      schema: subscriptions_analytics
+      threads: 4

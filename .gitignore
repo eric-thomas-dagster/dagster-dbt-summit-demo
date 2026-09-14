@@ -1,0 +1,38 @@
+# Secrets — MotherDuck token lives here
+.env
+.env.*
+!.env.example
+
+# Local envs / caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.dagster_home/
+.dg/
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# uv lock left OUT to keep the repo lighter — reproducibility comes from
+# pyproject.toml pins. Include if the audience needs bit-exact reproducibility.
+uv.lock
+
+# Backup files from dg.toml swap operations
+*.bak
+*.bak[0-9]
+*.bak.*
+
+# dbt build artifacts in the raw project dirs (not the cached state under
+# src/demo/defs/.local_defs_state/, which IS shipped)
+dbt_projects/*/target/
+dbt_projects/*/logs/
+dbt_projects/*/dbt_packages/
+
+# Python build/dist — but explicitly DO ship wheels/ (vendored parity-branch
+# wheels, needed for Cloud deploy)
+build/
+dist/
+*.egg-info/

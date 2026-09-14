@@ -1,0 +1,12 @@
+version: 2
+
+# MetricFlow time-spine YAML config — required alongside metricflow_time_spine.sql
+# now that the implicit-time-spine behaviour is deprecated (dbt 1.9+).
+models:
+  - name: metricflow_time_spine
+    description: Required time spine for the dbt semantic layer.
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day

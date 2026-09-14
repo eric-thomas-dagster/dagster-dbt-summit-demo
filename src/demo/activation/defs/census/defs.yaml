@@ -1,0 +1,36 @@
+# Census sync — MRR → Salesforce (account_mrr field on the Account object).
+# The finance team consumes this in Salesforce reports; account executives see
+# per-account MRR in their opportunity views.
+#
+# In real mode: flip demo_mode to false and populate CENSUS_API_KEY; the parent
+# CensusComponent's discovery + trigger_sync_and_poll drives the real sync.
+
+type: demo.components.CommerceCensusSync
+
+attributes:
+  demo_mode: true
+  workspace:
+    api_key: "demo"                # {{ env.CENSUS_API_KEY }} in prod
+  sync_selector:
+    by_name:
+      - mrr_to_salesforce
+  sync_id: "sync-mrr-001"
+  demo_asset:
+    key: salesforce/account_mrr
+    group_name: census_salesforce
+    kinds: [census, salesforce]
+    owners:
+      - growth-eng@example.com
+    tags:
+      domain: revenue
+      destination: salesforce
+    deps:
+      - mrr                         # subscriptions_analytics.mrr
+    # Eager automation — re-sync as soon as upstream MRR advances. In the UI
+    # the finance team sees a green "auto-materialized" tick immediately after
+    # every mrr rebuild, no schedule required.
+    automation_condition: "{{ automation_condition.eager() }}"
+    description: >
+      Sync monthly recurring revenue into Salesforce's Account.account_mrr
+      field via Census. The finance-team consumers see per-account MRR
+      inside Salesforce reports and account-executive opportunity views.

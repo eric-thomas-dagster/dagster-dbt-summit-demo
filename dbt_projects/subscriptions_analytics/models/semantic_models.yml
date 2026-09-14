@@ -1,0 +1,72 @@
+version: 2
+
+# Minimal semantic layer entry point — PR #26391 Feature 4:
+# `enable_semantic_layer_assets: true` in defs.yaml emits each semantic model +
+# metric as an observable AssetSpec. Layered on top of mrr (public + gold tier).
+#
+# Fuller semantic layer expansion (saved_queries, cross-metric derivations,
+# entity graph) lands in step 10 with the PR-feature garnish pass.
+semantic_models:
+  - name: sem_mrr
+    description: Semantic model over monthly recurring revenue.
+    model: ref('mrr')
+    defaults:
+      agg_time_dimension: mrr_month
+    entities:
+      - name: mrr_month_key
+        type: primary
+        expr: month
+    dimensions:
+      - name: mrr_month
+        type: time
+        expr: month
+        type_params:
+          time_granularity: month
+    measures:
+      - name: mrr_usd
+        description: Monthly recurring revenue in USD.
+        agg: sum
+        expr: mrr_usd
+      - name: paying_customers
+        description: Distinct paying customers per month.
+        agg: sum
+        expr: paying_customers
+
+metrics:
+  - name: metric_mrr
+    description: Monthly recurring revenue.
+    type: simple
+    label: MRR (USD)
+    type_params:
+      measure: mrr_usd
+
+  - name: metric_paying_customers
+    description: Paying customers count.
+    type: simple
+    label: Paying Customers
+    type_params:
+      measure: paying_customers
+
+# Saved queries — dbt 1.7+, emitted as observable AssetSpecs by dagster-dbt
+# (Feature 4 companion). Each saved query is a curated MetricFlow query that
+# downstream BI tools consume via the semantic layer — surfacing them as
+# Dagster assets means the exec dashboard's underlying query lineage is
+# visible + selectable in the graph, not just the metric definitions.
+saved_queries:
+  - name: mrr_last_12_months
+    description: MRR trended over the trailing 12 months for the exec dashboard.
+    label: MRR — last 12 months
+    query_params:
+      metrics:
+        - metric_mrr
+        - metric_paying_customers
+      group_by:
+        - "Dimension('sem_mrr__mrr_month')"
+
+  - name: mrr_summary
+    description: Point-in-time MRR + paying customer snapshot for finance reports.
+    label: MRR summary
+    query_params:
+      metrics:
+        - metric_mrr
+        - metric_paying_customers

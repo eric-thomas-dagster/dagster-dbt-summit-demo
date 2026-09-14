@@ -1,0 +1,73 @@
+[project]
+name = "demo"
+requires-python = ">=3.11,<3.13"
+version = "0.1.0"
+dependencies = [
+    "dagster",
+    "dagster-dbt",
+    # MotherDuck backend — dbt-duckdb speaks the `md:` protocol via its
+    # transitive dependency on duckdb. No dbt-snowflake / snowflake-connector
+    # needed. Free MotherDuck tier covers the whole demo.
+    "dbt-duckdb>=1.9,<1.11",
+    "duckdb>=1.0",
+    # Ingestion demo-mode components generate DataFrames via Faker and land
+    # them in MotherDuck (via WarehouseResource._write_motherduck). Both dbt
+    # projects then read those MotherDuck tables — graph flows end-to-end
+    # without any SaaS APIs.
+    "pandas",
+    "faker",
+    # Component libraries — each subclass in demo.components/ derives from
+    # one of these. Editable overrides at the bottom of this file point them
+    # at the local monorepo where the feature branches live.
+    "dagster-fivetran",
+    "dagster-dlt",
+    "dagster-census",
+    "dagster-hightouch",
+    "dagster-powerbi",
+    "psutil>=7.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "dagster-dg-cli",
+    "dagster-webserver",
+    "pytest>=9.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+force-include = { "pyproject.toml" = "pyproject.toml" }
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "demo"
+registry_modules = [
+    "demo.components.*",
+]
+
+# Editable overrides pointing at the internal monorepo where the 3 stacked
+# feature branches live (et/dbt-core-enhancements, et/dbt-cloud-enhancements,
+# et/dbt-public-helper-parity). Once those merge and dagster-dbt cuts a release,
+# drop this whole block and `uv add dagster-dbt` from PyPI will get you the
+# same features.
+[tool.uv.sources]
+dagster = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/dagster", editable = true }
+dagster-webserver = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/dagster-webserver", editable = true }
+dagster-graphql = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/dagster-graphql", editable = true }
+dagster-shared = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-shared", editable = true }
+dagster-dg-cli = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-dg-cli", editable = true }
+dagster-dg-core = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-dg-core", editable = true }
+dagster-cloud-cli = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-cloud-cli", editable = true }
+dagster-dbt = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-dbt", editable = true }
+dagster-fivetran = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-fivetran", editable = true }
+dagster-dlt = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-dlt", editable = true }
+dagster-census = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-census", editable = true }
+dagster-hightouch = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-hightouch", editable = true }
+dagster-powerbi = { path = "/Users/ericthomas/internal/dagster-oss/python_modules/libraries/dagster-powerbi", editable = true }
+
+

@@ -1,0 +1,26 @@
+./wheels/dagster_shared-1!0+dev-py3-none-any.whl
+./wheels/dagster_pipes-1!0+dev-py3-none-any.whl
+./wheels/dagster-1!0+dev-py3-none-any.whl
+./wheels/dagster_graphql-1!0+dev-py3-none-any.whl
+./wheels/dagster_dbt-1!0+dev-py3-none-any.whl
+./wheels/dagster_fivetran-1!0+dev-py3-none-any.whl
+./wheels/dagster_dlt-1!0+dev-py3-none-any.whl
+./wheels/dagster_census-1!0+dev-py3-none-any.whl
+./wheels/dagster_hightouch-1!0+dev-py3-none-any.whl
+./wheels/dagster_powerbi-1!0+dev-py3-none-any.whl
+./wheels/dagster_cloud_cli-1!0+dev-py3-none-any.whl
+./wheels/dagster_cloud-1!0+dev-py3-none-any.whl
+# demo package NOT installed as a wheel — deploys use --working-directory src
+# so Python resolves `demo` from /opt/dagster/app/src/demo/. That way
+# `Path(__file__).parents[3]` in each definitions.py points at the repo root
+# (/opt/dagster/app), which contains pyproject.toml — required by the dbt
+# component's `get_defs_module_path_for_project` walk-up.
+dbt-core>=1.9,<1.11
+# MotherDuck backend — dbt-duckdb + duckdb only. `snowflake-connector-python`
+# and `dbt-snowflake` intentionally dropped; that removes the boto3/aiobotocore
+# resolver-backtracking headache entirely (aiobotocore was the reason we had
+# to pin boto3/botocore exactly on the Snowflake variant).
+dbt-duckdb>=1.9,<1.11
+duckdb>=1.0
+pandas
+faker

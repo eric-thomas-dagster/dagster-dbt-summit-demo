@@ -1,0 +1,31 @@
+name: "commerce_core"
+
+config-version: 2
+version: "0.1"
+
+profile: "commerce_core"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analysis"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_modules"
+  - "logs"
+
+require-dbt-version: [">=1.9.0", "<2.0.0"]
+
+# Owned by the "Platform Team" — this project stages Fivetran + dlt raw data
+# and exposes a canonical set of dims/facts. Public marts cross into the
+# downstream subscriptions_analytics project via dbt mesh (access: public).
+models:
+  commerce_core:
+    +materialized: view
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
