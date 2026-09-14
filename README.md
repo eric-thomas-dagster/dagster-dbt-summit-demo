@@ -1,61 +1,80 @@
 # dagster-dbt-summit-demo
 
-A Dagster + dbt end-to-end demo built for dbt Summit 2026, showcasing the [`dagster-dbt`](https://github.com/dagster-io/dagster) `DbtProjectComponent` on Eric's `et/dbt-public-helper-parity` feature branch — sources with auto-derived freshness policies, `build_after`-derived freshness on marts, code-version automation, `dbt/state=modified` slim-CI tagging, contract metadata, exposures + semantic layer as first-class assets, cross-project dbt mesh via `external_packages`.
+A Dagster + dbt end-to-end demo, backed by [MotherDuck](https://motherduck.com/) (free tier — no credit card). Four Dagster code locations map to four data-platform layers, and one cascade wires them together:
 
-Everything runs on **MotherDuck** (cloud DuckDB, free tier — no credit card). Four Dagster code locations mapped to four data-platform layers with cross-location remote-graph merges lighting up.
+**Fivetran + dlt ingest → dbt marts (mesh) → semantic layer + exposures → Census / Hightouch / PowerBI activation.**
 
-## Architecture
+Every 15 minutes a schedule fires the ingestion job; downstream dbt marts + activation assets have `AutomationCondition.eager()` set, so the whole graph refreshes end-to-end with zero clicks.
 
-Four code locations, one connected asset graph:
+## What's in the demo
 
-| Location | Owner | Contents |
+| Layer | Owner | Contents |
 |---|---|---|
-| `summit-ingestion` | Platform | Fivetran + dlt demo components — write mock rows to MotherDuck `raw_stripe.*` / `raw_events.*` |
-| `summit-commerce-core` | Platform | dbt project — Stripe + events staging + `dim_customers`, `fct_orders`, `fct_events` marts with `access: public` (mesh interface) |
-| `summit-subscriptions-analytics` | Growth | dbt project — `mrr`, `ltv_segments`, `churn_prediction`, semantic layer, exposures. Depends on `commerce_core` via `external_packages` |
-| `summit-activation` | Growth + Finance | Census + Hightouch + PowerBI demo components — fake syncs downstream of the subs marts |
+| `summit-ingestion` | Platform | Fivetran + dlt components landing `raw_stripe.*` / `raw_events.*` |
+| `summit-commerce-core` | Platform | dbt project — Stripe + events staging + `dim_customers`, `fct_orders`, `fct_events` (`access: public` — the mesh interface) |
+| `summit-subscriptions-analytics` | Growth | dbt project — `mrr`, `ltv_segments`, `churn_prediction`, semantic models, exposures. Consumes `commerce_core` via dbt mesh (`external_packages`) |
+| `summit-activation` | Growth + Finance | Census + Hightouch + PowerBI components — synced downstream of subs marts |
 
-Cross-location merges (each fires once code locations load):
-- **Feature 1a (sources)** — ingestion Fivetran/dlt materializable AssetsDefinitions merge with commerce_core's dbt source specs
-- **Feature 5 (mesh)** — subs' `external_packages: [commerce_core]` stubs merge with commerce_core's real public marts
-- **Feature 3 (exposures)** — subs exposures with `meta.dagster.asset_key` merge with activation sync assets
+Because the four sit in **separate code locations**, three Dagster remote-graph merges light up in the UI:
 
-## Continuous heartbeat
+- **Sources merge** — ingestion's Fivetran/dlt assets share asset keys with commerce_core's dbt source specs. Fivetran contributes materialization; dbt contributes freshness policy + column schema.
+- **Mesh merge** — subs' `external_packages: [commerce_core]` stubs merge with commerce_core's real public marts.
+- **Exposures merge** — subs exposures (with `meta.dagster.asset_key`) merge with activation sync assets.
 
-- **Ingestion has a 15-min schedule** (`every_15_min_ingestion`, `default_status=RUNNING`) → runs `run_all_ingestion` on cron
-- **All dbt marts have `AutomationCondition.eager()`** via `post_processing` → refire when upstreams advance
-- **Activation assets have `AutomationCondition.eager()`** at the component level → refire when marts advance
+## dbt features on display
 
-Net effect: one 15-minute tick materializes the full graph end-to-end without any clicks.
+The dbt project layer uses [`dagster-dbt`](https://github.com/dagster-io/dagster/tree/master/python_modules/libraries/dagster-dbt)'s `DbtProjectComponent` with every opt-in feature enabled:
 
-## Local dev
+- **Source freshness** — auto-derived `FreshnessPolicy` from `sources[*].freshness` blocks, plus a companion sensor that runs `dbt source freshness` on a schedule and emits materializations when warehouse timestamps advance
+- **Model freshness** — auto-derived `FreshnessPolicy` from dbt 1.9's `config.freshness.build_after` on select marts
+- **Code-version automation** — `AutomationCondition.code_version_changed()` on every model, so a SQL edit triggers only the changed models to rebuild
+- **`dbt/state=modified` tagging** — slim-CI selection via `AssetSelection.tag("dbt/state", "modified")`, without needing to wrap the dbt CLI
+- **Contract metadata + materialization kinds** — enforced contracts surface as structured spec metadata; incremental / view / table kinds render as UI chips
+- **Exposures + semantic layer as first-class AssetSpecs** — exposures show as terminal Dagster nodes; semantic models and metrics show as their own group
+- **Cross-project dbt mesh** — `external_packages: [commerce_core]` on the downstream project's component; Dagster generates observable stubs that merge remotely
 
-Requires a checkout of the `et/dbt-public-helper-parity` branch at `/Users/ericthomas/internal/dagster-oss` (the paths in `[tool.uv.sources]`). Edit those paths in `pyproject.toml` if your monorepo lives elsewhere.
+> A couple of these are still in review upstream ([PR #26391](https://github.com/dagster-io/dagster/pull/26391) for the Core enhancements, [#26393](https://github.com/dagster-io/dagster/pull/26393) for the public-helper surface). The demo runs on that feature-branch build in the meantime — see [Feature-branch dependencies](#feature-branch-dependencies) for the mechanics — and drops back to a stock `uv add dagster-dbt` once merged.
+
+## Running it
 
 ```bash
-cp .env.example .env      # then paste your MotherDuck token
+cp .env.example .env       # then paste your MotherDuck token
 uv sync
-dg dev                    # 4 code locations load
+dg dev                     # 4 code locations load at http://localhost:3000
 ```
 
-## Cloud deploy
+MotherDuck free tier gives you 10 GB storage + reasonable compute — plenty for the demo. Grab a read/write token from [motherduck.com](https://motherduck.com) → Settings → Access Tokens.
 
-The vendored `wheels/` directory contains pre-built wheels for the parity-branch packages (`dagster`, `dagster-dbt`, `dagster-fivetran`, etc.) — needed because Dagster+ serverless can't resolve `[tool.uv.sources]` local paths. `requirements.txt` reads them.
-
-To deploy to Dagster+:
+One-time: create the `dbt_summit` database + four schemas that the demo writes to. Either via the MotherDuck UI, or:
 
 ```bash
-# 1. Push MotherDuck token to Cloud
+set -a && source .env && set +a
+python -c "
+import duckdb
+c = duckdb.connect('md:')
+c.execute('CREATE DATABASE IF NOT EXISTS dbt_summit')
+c.execute('USE dbt_summit')
+for s in ['raw_stripe', 'raw_events', 'commerce_core', 'subscriptions_analytics']:
+    c.execute(f'CREATE SCHEMA IF NOT EXISTS {s}')
+"
+```
+
+Then hit `run_all_ingestion` in the Dagster UI (or wait 15 min for the schedule tick). Cascade fires the rest.
+
+## Deploying to Dagster+
+
+If you want it running continuously:
+
+```bash
 dg plus create env MOTHERDUCK_TOKEN --from-local-env --scope full --global -y
 
-# 2. Deploy each of the four locations (Docker layer cache makes 2-4 fast)
 for pair in \
   "summit-ingestion:demo.ingestion.definitions" \
   "summit-commerce-core:demo.commerce_core.definitions" \
   "summit-subscriptions-analytics:demo.subscriptions_analytics.definitions" \
   "summit-activation:demo.activation.definitions"; do
   loc="${pair%%:*}"; mod="${pair##*:}"
-  .venv/bin/dagster-cloud serverless deploy-docker . \
+  dagster-cloud serverless deploy-docker . \
     --base-image public.ecr.aws/docker/library/python:3.12-slim \
     --location-name "$loc" \
     --module-name "$mod" \
@@ -64,56 +83,16 @@ for pair in \
 done
 ```
 
-`--working-directory src` is required — `Path(__file__).parents[3]` in each `definitions.py` resolves to `/opt/dagster/app` only when Python imports `demo` from the source tree, not a wheel install.
+`--working-directory src` matters — the four `definitions.py` files use `Path(__file__).parents[3]` to locate the repo root, which only resolves correctly when `demo` is imported from the source tree.
 
-## Rebuilding the wheels
+## Feature-branch dependencies
 
-If the parity branch advances, refresh `wheels/`:
+Because a handful of the parity features above haven't landed on `main` yet, the demo pins `dagster` / `dagster-dbt` / the integration libraries to prebuilt wheels checked into `wheels/`. Locally, `[tool.uv.sources]` in `pyproject.toml` points at a monorepo path (`/Users/ericthomas/internal/dagster-oss`) so `uv sync` picks up editable installs of the same code. Edit those paths if your checkout lives elsewhere.
 
-```bash
-for pkg in \
-  "dagster" \
-  "dagster-pipes" \
-  "dagster-graphql" \
-  "dagster-webserver" \
-  "libraries/dagster-shared" \
-  "libraries/dagster-dbt" \
-  "libraries/dagster-dg-cli" \
-  "libraries/dagster-dg-core" \
-  "libraries/dagster-cloud-cli" \
-  "libraries/dagster-fivetran" \
-  "libraries/dagster-dlt" \
-  "libraries/dagster-census" \
-  "libraries/dagster-hightouch" \
-  "libraries/dagster-powerbi" \
-  "dagster-cloud"; do
-  (cd /Users/ericthomas/internal/dagster-oss/python_modules/$pkg && \
-   uv build --wheel --out-dir "$OLDPWD/wheels")
-done
-```
+Once the upstream PRs merge and a `dagster-dbt` release ships them, the whole `wheels/` directory and the `[tool.uv.sources]` block go away and `uv add dagster-dbt` from PyPI replaces both.
 
-## Regenerating the cached dbt state
+## Known quirks worth calling out
 
-`src/demo/defs/.local_defs_state/DbtProjectComponent__*/project/` holds the compiled `manifest.json` that the component reads at boot. It's checked in so cloud deploys work without a warehouse round-trip. To refresh after editing a dbt model:
-
-```bash
-set -a && source .env && set +a
-for proj in commerce_core subscriptions_analytics; do
-  cd src/demo/defs/.local_defs_state/DbtProjectComponent__${proj}__/project
-  ../../../../../../../.venv/bin/dbt parse --profiles-dir .
-  cd -
-done
-```
-
-Any dbt model edit also needs the source file mirrored into the cached copy:
-
-```bash
-cp dbt_projects/subscriptions_analytics/models/marts/mrr.sql \
-   src/demo/defs/.local_defs_state/DbtProjectComponent__subscriptions_analytics__/project/models/marts/mrr.sql
-```
-
-## Known gotchas
-
-- `.dockerignore` must NOT list `target` as a wildcard — that also strips the cached manifest inside `.local_defs_state/…/project/target/manifest.json`
-- Dagster's UI "Materialize" button on individual asset tiles may error with `DagsterInvalidSubsetError` for assets that receive cross-location asset checks (dbt source tests attaching to ingestion asset keys). Use the job button or the schedule instead — those route through explicit key selections
-- DuckDB's `date_trunc('month', ts)` returns TIMESTAMP; Snowflake returns DATE. Any dbt model with an enforced `DATE` contract needs `::date` cast at the model boundary
+- **UI "Materialize" on individual asset tiles may error with `DagsterInvalidSubsetError`** when the selected asset receives cross-location asset checks (dbt source tests attaching to ingestion asset keys). Use the job button or the schedule — those go through explicit key selections that dodge the workspace-level check auto-inclusion.
+- **DuckDB vs Snowflake type quirks**: `date_trunc('month', ts)` returns TIMESTAMP on DuckDB, DATE on Snowflake. Any dbt model with an enforced `DATE` contract needs `::date` casting at the boundary (see `mrr.sql`).
+- **Refreshing the checked-in dbt manifest** (after any model edit): re-run `dbt parse --profiles-dir .` inside `src/demo/defs/.local_defs_state/DbtProjectComponent__<project>__/project/` and mirror the model file into that copy so the container ships the up-to-date SQL + manifest together.
